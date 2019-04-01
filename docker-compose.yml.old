@@ -1,0 +1,99 @@
+version: "3.5"
+services:
+  spark-cluster:
+    build:
+      context: ./base
+    image: datworks/spark
+    command: echo "Dummy service"
+
+  spark-master:
+    image: datworks/spark
+    hostname: "spark-master"
+    command: /usr/local/spark/bin/spark-class org.apache.spark.deploy.master.Master -h spark-master
+    environment:
+      SERVICE_NAME: "spark-master"
+      SPARK_USER: "root"
+      SPARK_MASTER_PORT: 7077
+      SPARK_PUBLIC_DNS: localhost
+      SPARK_MASTER_WEBUI_PORT: 18081
+    expose:
+      - 17001
+      - 17002
+      - 17003
+      - 17004
+      - 17005
+      - 17006
+      - 7077
+      - 16066
+    ports:
+      - 16066:16066
+      - 7077:7077
+      - 18081:18081
+    networks: 
+      - sparknet
+    volumes:
+     - /home/dat/output:/data
+
+  spark-worker:
+    image: datworks/spark
+    hostname: "spark-worker"
+    environment:
+      GRANT_SUDO: 1
+      SERVIVE_NAME: "spark-worker"
+      SPARK_USER: "root"
+      SPARK_WORKER_CORES: 64
+      SPARK_WORKER_MEMORY: 128g
+      SPARK_WORKER_PORT: 18881
+      SPARK_PUBLIC_DNS: localhost
+      SPARK_WORKER_WEBUI_PORT: 18082
+    command:  /usr/local/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    links:
+      - spark-master
+      - livy
+    expose:
+      - 17012
+      - 17013
+      - 17014
+      - 17015
+      - 17016
+      - 18881
+    ports:
+      - 18082  # put 18082:18082 only if single worker
+    networks:
+      - sparknet
+    volumes:
+     - /home/dat/output:/data
+
+  livy:
+    image: datworks/livy_server
+    build:
+      context: ./livy_server
+    hostname: "livy"
+    command: /apps/livy/bin/livy-server
+    networks: 
+      - sparknet
+    expose: 
+      - 8998
+    ports: 
+      - 8998:8998
+    volumes:
+     - /home/dat/output:/data
+
+  jupyter:
+    image: datworks/jupyter
+    build:
+      context: ./jupyter_notebook
+    command: start-notebook.sh --debug  --NotebookApp.password='sha1:921891234e96:1c683847ddc326ec718f77a3626fc5310d08b858'
+    environment:
+      JUPYTER_ENABLE_LAB: 1
+    links:
+      - livy
+    networks: 
+      - sparknet
+    ports: 
+      - 8888:8888
+    volumes:
+     - /home/dat/notebook:/home/jovyan/work
+
+networks:
+  sparknet:

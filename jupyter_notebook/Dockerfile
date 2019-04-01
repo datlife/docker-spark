@@ -1,17 +1,55 @@
-FROM datworks/base-spark
+FROM datworks/spark
 
-# Activate ipywidgets extension in the environment that runs the notebook server
-RUN  jupyter nbextension enable --py widgetsnbextension --sys-prefix && \
-    # Also activate ipywidgets extension for JupyterLab
-    # Check this URL for most recent compatibilities
-    # https://github.com/jupyter-widgets/ipywidgets/tree/master/packages/jupyterlab-manager
-    jupyter labextension install @jupyter-widgets/jupyterlab-manager@^0.38.1 && \
-    jupyter labextension install jupyterlab_bokeh@0.6.3 && \
-    npm cache clean --force && \
-    rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
-    rm -rf /home/$NB_USER/.cache/yarn && \
-    rm -rf /home/$NB_USER/.node-gyp && \
+# Install required packages to have functional notebook
+RUN curl -sL https://deb.nodesource.com/setup_6.x | bash - && \
+    apt-get update && apt-get install -yq --no-install-recommends \
+    build-essential \
+    emacs \
+    git \
+    inkscape \
+    jed \
+    libsm6 \
+    libxext-dev \
+    libxrender1 \
+    lmodern \
+    netcat \
+    pandoc \
+    python-dev \
+    libkrb5-dev \
+    texlive-fonts-extra \
+    texlive-fonts-recommended \
+    texlive-generic-recommended \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-xetex \
+    tzdata \
+    npm nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install pyarrow
-RUN conda install pyarrow -c conda-forge && \
+
+# Install Jupyter Notebook, Lab, and Hub
+# # Generate a notebook server config
+RUN conda install --yes \
+    'notebook=5.7.8' \
+    'jupyterlab=0.35.4'\
+    'tornado=4.5.3' &&\
+    pip install sparkmagic==0.12.1 && \
     conda clean -tipsy && \
+    npm cache clean --force && \
+    jupyter notebook --generate-config && \
+    rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
+    rm -rf ~/.cache/yarn && \
+    mkdir ~/.sparkmagic
+
+# ======================
+# Install Jupyter Kernel
+# ======================
+WORKDIR /opt/conda/lib/python3.7/site-packages
+RUN  jupyter-kernelspec install sparkmagic/kernels/pysparkkernel && \
+     jupyter-kernelspec install sparkmagic/kernels/pyspark3kernel && \
+     jupyter nbextension enable --py widgetsnbextension --sys-prefix && \
+     jupyter serverextension enable --py sparkmagic
+
+COPY config.json /root/.sparkmagic/config.json
+WORKDIR /opt/notebooks
+
